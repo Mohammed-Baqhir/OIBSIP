@@ -4,6 +4,11 @@
 
 An interactive **RFM + K-Means customer segmentation dashboard** for an e-commerce customer base.
 
+
+## 🚀 Live Demo
+
+👉 [Open the Retail Sales Dashboard](https://customer-segmentation-analysis-l1.streamlit.app/)
+
 ## Folder Structure
 
 ```text
