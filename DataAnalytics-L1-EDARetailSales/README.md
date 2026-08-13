@@ -2,6 +2,11 @@
 
 An interactive Exploratory Data Analysis project for a retail sales dataset.
 
+
+## 🚀 Live Demo
+
+👉 [Open the Retail Sales Dashboard](https://oibsip-retail-sales-eda.streamlit.app/)
+
 ## Features
 
 - Dataset inspection and cleaning
