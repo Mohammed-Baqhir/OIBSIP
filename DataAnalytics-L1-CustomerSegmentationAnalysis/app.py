@@ -16,7 +16,8 @@ st.set_page_config(
 )
 
 
-DATA_PATH = "data/marketing_campaign.csv"
+BASE_DIR = Path(__file__).resolve().parent
+DATA_PATH = BASE_DIR / "data" / "marketing_campaign.csv"
 
 
 @st.cache_data
