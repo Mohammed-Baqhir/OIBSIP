@@ -4,6 +4,11 @@
 
 End-to-end house-price prediction using the official **Kaggle House Prices: Advanced Regression Techniques (Ames Housing)** training data. Kaggle provides `train.csv`, `test.csv`, and `data_description.txt`; `SalePrice` is the target.
 
+
+## 🚀 Live Demo
+
+👉 [Open the Retail Sales Dashboard](https://house-price-prediction-l2.streamlit.app/)
+
 ## Dataset
 Official source: https://www.kaggle.com/competitions/house-prices-advanced-regression-techniques/data
 
