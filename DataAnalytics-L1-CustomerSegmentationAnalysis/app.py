@@ -4,10 +4,15 @@ import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
 
+from pathlib import Path
 from sklearn.cluster import KMeans
 from sklearn.preprocessing import StandardScaler
 from sklearn.metrics import silhouette_score
 
+
+# =========================================================
+# PAGE CONFIGURATION
+# =========================================================
 
 st.set_page_config(
     page_title="Customer Segmentation Dashboard",
@@ -16,35 +21,96 @@ st.set_page_config(
 )
 
 
+# =========================================================
+# DATA PATH
+# =========================================================
+
 BASE_DIR = Path(__file__).resolve().parent
 DATA_PATH = BASE_DIR / "data" / "marketing_campaign.csv"
 
 
+# =========================================================
+# LOAD DATA
+# =========================================================
+
 @st.cache_data
 def load_data():
-    df = pd.read_csv(DATA_PATH, sep="\t")
+
+    # Check whether dataset exists
+    if not DATA_PATH.exists():
+        st.error(
+            f"Dataset not found.\n\n"
+            f"Expected file:\n`{DATA_PATH}`\n\n"
+            f"Make sure `marketing_campaign.csv` is inside the "
+            f"`data` folder in your GitHub repository."
+        )
+        st.stop()
+
+    df = pd.read_csv(
+        DATA_PATH,
+        sep="\t"
+    )
+
     df.columns = df.columns.str.strip()
 
     original_rows = len(df)
-    duplicate_rows = int(df.duplicated().sum())
+
+    duplicate_rows = int(
+        df.duplicated().sum()
+    )
+
     df = df.drop_duplicates().copy()
 
-    missing_income = int(df["Income"].isna().sum())
-    df["Income"] = df["Income"].fillna(df["Income"].median())
+    # -----------------------------------------------------
+    # Missing Income
+    # -----------------------------------------------------
+
+    missing_income = int(
+        df["Income"].isna().sum()
+    )
+
+    df["Income"] = df["Income"].fillna(
+        df["Income"].median()
+    )
+
+    # -----------------------------------------------------
+    # Customer Date
+    # -----------------------------------------------------
 
     if "Dt_Customer" in df.columns:
+
         df["Dt_Customer"] = pd.to_datetime(
             df["Dt_Customer"],
             dayfirst=True,
             errors="coerce"
         )
 
-    # Basic consistency checks for the analysis population.
-    invalid_birth = int((~df["Year_Birth"].between(1900, 2000)).sum())
-    invalid_income = int((df["Income"] < 0).sum())
+    # -----------------------------------------------------
+    # Data Quality Checks
+    # -----------------------------------------------------
 
-    df = df[df["Year_Birth"].between(1900, 2000)].copy()
-    df = df[df["Income"] >= 0].copy()
+    invalid_birth = int(
+        (~df["Year_Birth"].between(1900, 2000)).sum()
+    )
+
+    invalid_income = int(
+        (df["Income"] < 0).sum()
+    )
+
+    df = df[
+        df["Year_Birth"].between(
+            1900,
+            2000
+        )
+    ].copy()
+
+    df = df[
+        df["Income"] >= 0
+    ].copy()
+
+    # -----------------------------------------------------
+    # RFM FEATURES
+    # -----------------------------------------------------
 
     spend_cols = [
         "MntWines",
@@ -61,19 +127,36 @@ def load_data():
         "NumStorePurchases",
     ]
 
-    df["Monetary"] = df[spend_cols].sum(axis=1)
+    # Monetary = total historical spending
+    df["Monetary"] = df[
+        spend_cols
+    ].sum(axis=1)
 
-    df["Frequency"] = df[purchase_cols].sum(axis=1)
+    # Frequency = total purchases
+    df["Frequency"] = df[
+        purchase_cols
+    ].sum(axis=1)
 
+    # Average purchase value
     df["AveragePurchaseValue"] = np.where(
         df["Frequency"] > 0,
         df["Monetary"] / df["Frequency"],
         0
     )
 
-    # Exact CLV cannot be calculated from this customer-level dataset
-    # because transaction history, lifespan and margin are unavailable.
+    # -----------------------------------------------------
+    # CLV PROXY
+    # -----------------------------------------------------
+
+    # Exact CLV cannot be calculated because this dataset
+    # does not provide customer lifespan, profit margin or
+    # complete transaction history.
+
     df["CLV_Proxy"] = df["Monetary"]
+
+    # -----------------------------------------------------
+    # DATA QUALITY SUMMARY
+    # -----------------------------------------------------
 
     quality = {
         "original_rows": original_rows,
@@ -88,20 +171,42 @@ def load_data():
     return df, quality
 
 
-def make_model_features(df):
-    x = df[["Recency", "Frequency", "Monetary"]].copy()
+# =========================================================
+# MODEL FEATURES
+# =========================================================
 
-    # Log-transform skewed purchase measures before standardisation.
-    x["Frequency"] = np.log1p(x["Frequency"])
-    x["Monetary"] = np.log1p(x["Monetary"])
+def make_model_features(df):
+
+    x = df[
+        [
+            "Recency",
+            "Frequency",
+            "Monetary"
+        ]
+    ].copy()
+
+    # Log transformation reduces skewness
+    x["Frequency"] = np.log1p(
+        x["Frequency"]
+    )
+
+    x["Monetary"] = np.log1p(
+        x["Monetary"]
+    )
 
     scaler = StandardScaler()
+
     X = scaler.fit_transform(x)
 
     return X, scaler
 
 
+# =========================================================
+# K-MEANS MODEL
+# =========================================================
+
 def run_kmeans(df, k):
+
     X, scaler = make_model_features(df)
 
     model = KMeans(
@@ -113,14 +218,29 @@ def run_kmeans(df, k):
     labels = model.fit_predict(X)
 
     result = df.copy()
+
     result["Cluster"] = labels
 
-    score = silhouette_score(X, labels) if k > 1 else np.nan
+    score = silhouette_score(
+        X,
+        labels
+    )
 
-    return result, scaler, model, X, score
+    return (
+        result,
+        scaler,
+        model,
+        X,
+        score
+    )
 
+
+# =========================================================
+# CLUSTER LABELING
+# =========================================================
 
 def cluster_label(row, medians):
+
     r = row["Recency"]
     f = row["Frequency"]
     m = row["Monetary"]
@@ -155,8 +275,14 @@ def cluster_label(row, medians):
     return "Regular Customers"
 
 
+# =========================================================
+# MARKETING ACTION
+# =========================================================
+
 def marketing_action(segment):
+
     actions = {
+
         "Loyal High-Value":
             "VIP rewards, early access, premium bundles and loyalty benefits.",
 
@@ -179,29 +305,33 @@ def marketing_action(segment):
     )
 
 
-# ---------------------------------------------------------
+# =========================================================
 # LOAD DATA
-# ---------------------------------------------------------
+# =========================================================
 
 df, quality = load_data()
 
 
-# ---------------------------------------------------------
+# =========================================================
 # HEADER
-# ---------------------------------------------------------
+# =========================================================
 
-st.title("🎯 Customer Segmentation Analysis")
+st.title(
+    "🎯 Customer Segmentation Analysis"
+)
 
 st.markdown(
     "### RFM-based K-Means clustering for targeted e-commerce marketing"
 )
 
 
-# ---------------------------------------------------------
-# SIDEBAR CONTROLS
-# ---------------------------------------------------------
+# =========================================================
+# SIDEBAR
+# =========================================================
 
-st.sidebar.header("⚙️ Controls")
+st.sidebar.header(
+    "⚙️ Controls"
+)
 
 k_selected = st.sidebar.slider(
     "Select Number of Clusters (K)",
@@ -213,9 +343,12 @@ k_selected = st.sidebar.slider(
 
 
 if "run_clustering" not in st.session_state:
+
     st.session_state.run_clustering = False
 
+
 if "active_k" not in st.session_state:
+
     st.session_state.active_k = 4
 
 
@@ -223,99 +356,136 @@ if st.sidebar.button(
     "🚀 Run Clustering",
     width="stretch"
 ):
+
     st.session_state.active_k = k_selected
+
     st.session_state.run_clustering = True
 
 
 if not st.session_state.run_clustering:
+
     st.info(
-        "Select K in the sidebar and click **Run Clustering** "
-        "to generate the customer segments."
+        "Select K in the sidebar and click "
+        "**Run Clustering** to generate the customer segments."
     )
+
     st.stop()
 
 
-# ---------------------------------------------------------
+# =========================================================
 # RUN CLUSTERING
-# ---------------------------------------------------------
+# =========================================================
 
 k = st.session_state.active_k
 
-clustered, scaler, model, X, silhouette = run_kmeans(
+(
+    clustered,
+    scaler,
+    model,
+    X,
+    silhouette
+) = run_kmeans(
     df,
     k
 )
 
 
-# Business-friendly names are generated from each cluster's RFM profile.
+# =========================================================
+# CLUSTER PROFILE
+# =========================================================
 
 raw_profile = (
-    clustered.groupby("Cluster")
+    clustered
+    .groupby("Cluster")
     .agg(
         Customers=("ID", "count"),
         Recency=("Recency", "mean"),
         Frequency=("Frequency", "mean"),
         Monetary=("Monetary", "mean"),
-        AveragePurchaseValue=("AveragePurchaseValue", "mean"),
-        CLV_Proxy=("CLV_Proxy", "mean"),
+        AveragePurchaseValue=(
+            "AveragePurchaseValue",
+            "mean"
+        ),
+        CLV_Proxy=(
+            "CLV_Proxy",
+            "mean"
+        ),
     )
     .reset_index()
 )
 
 
 medians = {
-    "Recency": clustered["Recency"].median(),
-    "Frequency": clustered["Frequency"].median(),
-    "Monetary": clustered["Monetary"].median(),
+
+    "Recency":
+        clustered["Recency"].median(),
+
+    "Frequency":
+        clustered["Frequency"].median(),
+
+    "Monetary":
+        clustered["Monetary"].median(),
 }
 
 
 name_map = {
-    int(row["Cluster"]): cluster_label(
-        row,
-        medians
-    )
+
+    int(row["Cluster"]):
+        cluster_label(
+            row,
+            medians
+        )
+
     for _, row in raw_profile.iterrows()
 }
 
 
-clustered["Segment"] = clustered["Cluster"].map(name_map)
+clustered["Segment"] = clustered[
+    "Cluster"
+].map(name_map)
 
 
 profile = raw_profile.copy()
 
-profile["Segment"] = profile["Cluster"].map(name_map)
+profile["Segment"] = profile[
+    "Cluster"
+].map(name_map)
 
-profile["Marketing_Action"] = profile["Segment"].map(
-    marketing_action
-)
+profile["Marketing_Action"] = profile[
+    "Segment"
+].map(marketing_action)
 
 
-# ---------------------------------------------------------
+# =========================================================
 # KPI ROW
-# ---------------------------------------------------------
+# =========================================================
 
 c1, c2, c3, c4, c5 = st.columns(5)
+
 
 c1.metric(
     "Customers",
     f"{len(clustered):,}"
 )
 
+
 c2.metric(
     "Avg Purchase Value",
     f"${clustered['AveragePurchaseValue'].mean():,.2f}"
 )
+
 
 c3.metric(
     "Avg Frequency",
     f"{clustered['Frequency'].mean():.2f}"
 )
 
+
 c4.metric(
     "Avg Monetary",
     f"${clustered['Monetary'].mean():,.2f}"
 )
+
 
 c5.metric(
     "Silhouette Score",
@@ -323,21 +493,23 @@ c5.metric(
 )
 
 
-# ---------------------------------------------------------
+# =========================================================
 # TABS
-# ---------------------------------------------------------
+# =========================================================
 
-tabs = st.tabs([
-    "🔍 Dataset & RFM",
-    "📐 Elbow Method",
-    "🔵 Cluster Analysis",
-    "🎯 Cluster Profiles",
-    "🔮 Predict Segment",
-])
+tabs = st.tabs(
+    [
+        "🔍 Dataset & RFM",
+        "📐 Elbow Method",
+        "🔵 Cluster Analysis",
+        "🎯 Cluster Profiles",
+        "🔮 Predict Segment",
+    ]
+)
 
 
 # =========================================================
-# TAB 1 — DATASET & RFM
+# TAB 1
 # =========================================================
 
 with tabs[0]:
@@ -387,7 +559,9 @@ with tabs[0]:
     )
 
 
-    st.subheader("Dataset Preview")
+    st.subheader(
+        "Dataset Preview"
+    )
 
     st.dataframe(
         df.head(10),
@@ -408,6 +582,7 @@ with tabs[0]:
             "CLV_Proxy",
         ]
     ].describe().T.round(2)
+
 
     st.dataframe(
         stats,
@@ -431,7 +606,7 @@ with tabs[0]:
 
 
 # =========================================================
-# TAB 2 — ELBOW METHOD
+# TAB 2
 # =========================================================
 
 with tabs[1]:
@@ -443,9 +618,12 @@ with tabs[1]:
 
     X_elbow, _ = make_model_features(df)
 
-    k_values = list(range(2, 9))
+    k_values = list(
+        range(2, 9)
+    )
 
     inertias = []
+
     sil_scores = []
 
 
@@ -457,7 +635,9 @@ with tabs[1]:
             n_init=10
         )
 
-        labels = km.fit_predict(X_elbow)
+        labels = km.fit_predict(
+            X_elbow
+        )
 
         inertias.append(
             km.inertia_
@@ -475,11 +655,13 @@ with tabs[1]:
         figsize=(9, 4.5)
     )
 
+
     ax.plot(
         k_values,
         inertias,
         marker="o"
     )
+
 
     ax.axvline(
         k,
@@ -487,6 +669,7 @@ with tabs[1]:
         alpha=0.7,
         label=f"Selected K = {k}"
     )
+
 
     ax.set_xlabel(
         "Number of Clusters (K)"
@@ -499,6 +682,7 @@ with tabs[1]:
     ax.set_title(
         "Elbow Method"
     )
+
 
     ax.legend()
 
@@ -516,15 +700,19 @@ with tabs[1]:
 
 
     elbow_table = pd.DataFrame({
+
         "K": k_values,
+
         "Inertia": np.round(
             inertias,
             2
         ),
+
         "Silhouette Score": np.round(
             sil_scores,
             3
         ),
+
     })
 
 
@@ -537,12 +725,13 @@ with tabs[1]:
     st.success(
         f"Current clustering uses K = {k}. "
         f"The silhouette score for this selection is {silhouette:.3f}. "
-        "The final K should consider both the elbow point and business interpretability."
+        "The final K should consider both the elbow point "
+        "and business interpretability."
     )
 
 
 # =========================================================
-# TAB 3 — CLUSTER ANALYSIS
+# TAB 3
 # =========================================================
 
 with tabs[2]:
@@ -561,6 +750,7 @@ with tabs[2]:
             figsize=(7, 5)
         )
 
+
         sns.scatterplot(
             data=clustered,
             x="Frequency",
@@ -571,6 +761,7 @@ with tabs[2]:
             alpha=0.75,
             ax=ax,
         )
+
 
         ax.set_title(
             "Frequency vs Monetary"
@@ -583,6 +774,7 @@ with tabs[2]:
         ax.set_ylabel(
             "Total Spend"
         )
+
 
         ax.legend(
             title="Segment",
@@ -605,6 +797,7 @@ with tabs[2]:
             figsize=(7, 5)
         )
 
+
         sns.scatterplot(
             data=clustered,
             x="Recency",
@@ -615,6 +808,7 @@ with tabs[2]:
             alpha=0.75,
             ax=ax,
         )
+
 
         ax.set_title(
             "Recency vs Monetary"
@@ -627,6 +821,7 @@ with tabs[2]:
         ax.set_ylabel(
             "Total Spend"
         )
+
 
         ax.legend(
             title="Segment",
@@ -649,8 +844,12 @@ with tabs[2]:
 
 
     counts = (
-        clustered.groupby(
-            ["Cluster", "Segment"]
+        clustered
+        .groupby(
+            [
+                "Cluster",
+                "Segment"
+            ]
         )
         .size()
         .reset_index(
@@ -667,12 +866,14 @@ with tabs[2]:
         figsize=(9, 4.5)
     )
 
+
     sns.barplot(
         data=counts,
         x="Segment",
         y="Customers",
         ax=ax
     )
+
 
     ax.set_title(
         "Number of Customers by Segment"
@@ -685,6 +886,7 @@ with tabs[2]:
     ax.set_ylabel(
         "Customers"
     )
+
 
     ax.tick_params(
         axis="x",
@@ -701,7 +903,7 @@ with tabs[2]:
 
 
 # =========================================================
-# TAB 4 — CLUSTER PROFILES
+# TAB 4
 # =========================================================
 
 with tabs[3]:
@@ -738,17 +940,29 @@ with tabs[3]:
     ).iterrows():
 
         st.markdown(
-            f"#### Cluster {int(row['Cluster'])} — {row['Segment']}\n"
-            f"- **Customers:** {int(row['Customers']):,}\n"
-            f"- **Average Recency:** {row['Recency']:.1f} days\n"
-            f"- **Average Frequency:** {row['Frequency']:.1f} purchases\n"
-            f"- **Average Monetary:** ${row['Monetary']:,.2f}\n"
-            f"- **Marketing Action:** {row['Marketing_Action']}"
+
+            f"#### Cluster {int(row['Cluster'])} — "
+            f"{row['Segment']}\n"
+
+            f"- **Customers:** "
+            f"{int(row['Customers']):,}\n"
+
+            f"- **Average Recency:** "
+            f"{row['Recency']:.1f} days\n"
+
+            f"- **Average Frequency:** "
+            f"{row['Frequency']:.1f} purchases\n"
+
+            f"- **Average Monetary:** "
+            f"${row['Monetary']:,.2f}\n"
+
+            f"- **Marketing Action:** "
+            f"{row['Marketing_Action']}"
         )
 
 
 # =========================================================
-# TAB 5 — PREDICT SEGMENT
+# TAB 5
 # =========================================================
 
 with tabs[4]:
@@ -759,9 +973,9 @@ with tabs[4]:
 
 
     st.write(
-        "Enter a customer's RFM behaviour. The dashboard standardises "
-        "the values with the same transformation used for K-Means "
-        "and assigns the nearest learned cluster."
+        "Enter a customer's RFM behaviour. The dashboard "
+        "standardises the values with the same transformation "
+        "used for K-Means and assigns the nearest learned cluster."
     )
 
 
@@ -803,13 +1017,15 @@ with tabs[4]:
         width="stretch"
     ):
 
-        user = pd.DataFrame([
-            {
-                "Recency": recency_input,
-                "Frequency": frequency_input,
-                "Monetary": monetary_input,
-            }
-        ])
+        user = pd.DataFrame(
+            [
+                {
+                    "Recency": recency_input,
+                    "Frequency": frequency_input,
+                    "Monetary": monetary_input,
+                }
+            ]
+        )
 
 
         user["Frequency"] = np.log1p(
@@ -845,7 +1061,8 @@ with tabs[4]:
 
 
         st.success(
-            f"Predicted Segment: **Cluster {predicted_cluster} — "
+            f"Predicted Segment: **Cluster "
+            f"{predicted_cluster} — "
             f"{predicted_segment}**"
         )
 
@@ -856,12 +1073,14 @@ with tabs[4]:
         )
 
 
-# ---------------------------------------------------------
+# =========================================================
 # FOOTER
-# ---------------------------------------------------------
+# =========================================================
 
 st.divider()
 
+
 st.caption(
-    "Oasis Infobyte — Data Analytics Task 2 | Customer Segmentation Analysis"
+    "Oasis Infobyte — Data Analytics Task 2 | "
+    "Customer Segmentation Analysis"
 )
