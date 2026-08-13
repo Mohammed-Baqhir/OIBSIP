@@ -1,5 +1,9 @@
 # 🍷 Wine Quality Prediction — Oasis Infobyte Task 2
 
+## 🚀 Live Demo
+
+👉 [Open Wine Quality Prediction App](https://oibsip-wine-quality-prediction-l2.streamlit.app/)
+
 ## Objective
 Train and compare **Random Forest, SGD, and SVC** classifiers to predict whether a wine is Good (quality ≥ 7) from physicochemical properties.
 
