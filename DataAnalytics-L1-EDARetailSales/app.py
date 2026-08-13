@@ -2,6 +2,7 @@ import streamlit as st
 import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sns
+from pathlib import Path
 
 st.set_page_config(
     page_title="Retail Sales Analytics",
@@ -99,15 +100,24 @@ st.markdown("""
 
 @st.cache_data
 def load_data():
-    df = pd.read_csv("data/retail_sales_dataset.csv")
+    # Get the folder containing this app.py file
+    base_dir = Path(__file__).resolve().parent
+
+    # Build the correct path to the dataset
+    data_path = base_dir / "data" / "retail_sales_dataset.csv"
+
+    df = pd.read_csv(data_path)
+
     df["Date"] = pd.to_datetime(df["Date"], errors="coerce")
     df = df.dropna(subset=["Date", "Total Amount"])
+
     df["Age Group"] = pd.cut(
         df["Age"],
         bins=[17, 25, 35, 45, 55, 65],
         labels=["18–25", "26–35", "36–45", "46–55", "56–64"],
         include_lowest=True,
     )
+
     return df
 
 
@@ -130,6 +140,7 @@ genders = st.sidebar.multiselect(
 
 min_date = df["Date"].min().date()
 max_date = df["Date"].max().date()
+
 date_range = st.sidebar.date_input(
     "Date Range",
     value=(min_date, max_date),
@@ -167,6 +178,7 @@ avg_order = filtered_df["Total Amount"].mean()
 total_quantity = filtered_df["Quantity"].sum()
 
 c1, c2, c3, c4 = st.columns(4)
+
 c1.metric("💰 Total Revenue", f"₹{total_sales:,.0f}")
 c2.metric("🧾 Transactions", f"{total_orders:,}")
 c3.metric("📈 Avg. Order Value", f"₹{avg_order:,.0f}")
@@ -179,6 +191,7 @@ tab1, tab2, tab3, tab4 = st.tabs(
     ["📈 Trends", "👥 Customers", "📦 Products", "🔥 Correlations"]
 )
 
+# ---------- Trends ----------
 with tab1:
     st.subheader("Monthly & Quarterly Sales Trends")
 
@@ -187,6 +200,7 @@ with tab1:
         .resample("MS")
         .sum()
     )
+
     quarterly = (
         filtered_df.set_index("Date")["Total Amount"]
         .resample("QS")
@@ -208,6 +222,7 @@ with tab1:
         "quarterly aggregation makes broader business cycles easier to compare."
     )
 
+# ---------- Customers ----------
 with tab2:
     st.subheader("Customer Demographics")
 
@@ -215,19 +230,35 @@ with tab2:
 
     with col1:
         st.markdown("**Revenue by Gender**")
-        gender_sales = filtered_df.groupby("Gender")["Total Amount"].sum()
+
+        gender_sales = (
+            filtered_df.groupby("Gender")["Total Amount"]
+            .sum()
+        )
+
         st.bar_chart(gender_sales)
 
     with col2:
         st.markdown("**Customer Age Groups**")
-        age_counts = filtered_df["Age Group"].value_counts().sort_index()
+
+        age_counts = (
+            filtered_df["Age Group"]
+            .value_counts()
+            .sort_index()
+        )
+
         st.bar_chart(age_counts)
 
     st.markdown("**Revenue by Age Group**")
+
     age_revenue = (
-        filtered_df.groupby("Age Group", observed=False)["Total Amount"]
+        filtered_df.groupby(
+            "Age Group",
+            observed=False
+        )["Total Amount"]
         .sum()
     )
+
     st.bar_chart(age_revenue)
 
     st.info(
@@ -235,6 +266,7 @@ with tab2:
         "from revenue contribution, which can reveal high-value segments."
     )
 
+# ---------- Products ----------
 with tab3:
     st.subheader("Product & Category Performance")
 
@@ -242,28 +274,43 @@ with tab3:
 
     with col1:
         st.markdown("**Revenue by Product Category**")
+
         category_sales = (
             filtered_df.groupby("Product Category")["Total Amount"]
             .sum()
             .sort_values(ascending=False)
         )
+
         st.bar_chart(category_sales)
 
     with col2:
         st.markdown("**Quantity Sold by Category**")
+
         category_qty = (
             filtered_df.groupby("Product Category")["Quantity"]
             .sum()
             .sort_values(ascending=False)
         )
+
         st.bar_chart(category_qty)
 
     st.markdown("**Top 10 Highest-Value Transactions**")
+
     top10 = (
         filtered_df.nlargest(10, "Total Amount")
-        [["Transaction ID", "Product Category", "Gender", "Age", "Quantity", "Total Amount"]]
+        [
+            [
+                "Transaction ID",
+                "Product Category",
+                "Gender",
+                "Age",
+                "Quantity",
+                "Total Amount",
+            ]
+        ]
         .reset_index(drop=True)
     )
+
     st.dataframe(top10, use_container_width=True)
 
     st.warning(
@@ -273,18 +320,33 @@ with tab3:
         "as a transparent substitute."
     )
 
+# ---------- Correlations ----------
 with tab4:
     st.subheader("Correlation Heatmap")
 
     numeric_cols = [
-        "Age", "Quantity", "Price per Unit", "Total Amount"
+        "Age",
+        "Quantity",
+        "Price per Unit",
+        "Total Amount",
     ]
+
     corr = filtered_df[numeric_cols].corr()
 
     fig, ax = plt.subplots(figsize=(8, 5))
-    sns.heatmap(corr, annot=True, fmt=".2f", cmap="Blues", ax=ax)
+
+    sns.heatmap(
+        corr,
+        annot=True,
+        fmt=".2f",
+        cmap="Blues",
+        ax=ax,
+    )
+
     ax.set_title("Correlation Matrix")
+
     st.pyplot(fig, use_container_width=True)
+
     plt.close(fig)
 
     st.info(
@@ -295,11 +357,18 @@ with tab4:
 
 # ---------- Data preview and downloads ----------
 st.markdown("---")
+
 st.subheader("📄 Filtered Dataset")
 
-st.dataframe(filtered_df.head(50), use_container_width=True)
+st.dataframe(
+    filtered_df.head(50),
+    use_container_width=True,
+)
 
-download_df = filtered_df.to_csv(index=False).encode("utf-8")
+download_df = filtered_df.to_csv(
+    index=False
+).encode("utf-8")
+
 st.download_button(
     "📥 Download Filtered CSV",
     data=download_df,
@@ -319,7 +388,11 @@ summary = (
         }
     )
 )
-summary_csv = summary.to_csv(index=False).encode("utf-8")
+
+summary_csv = summary.to_csv(
+    index=False
+).encode("utf-8")
+
 st.download_button(
     "📊 Download Category Summary",
     data=summary_csv,
@@ -327,4 +400,6 @@ st.download_button(
     mime="text/csv",
 )
 
-st.caption("Retail Sales EDA • Python • Pandas • Matplotlib • Seaborn • Streamlit")
+st.caption(
+    "Retail Sales EDA • Python • Pandas • Matplotlib • Seaborn • Streamlit"
+)
