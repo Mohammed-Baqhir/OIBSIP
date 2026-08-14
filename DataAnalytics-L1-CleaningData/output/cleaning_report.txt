@@ -1,0 +1,38 @@
+
+OASIS INFOBYTE - DATA CLEANING REPORT
+========================================
+
+Source: Retail Store Sales: Dirty for Data Cleaning
+
+Original shape:
+12575 rows x 11 columns
+
+Final shape:
+12575 rows x 11 columns
+
+
+QUALITY ACTIONS
+----------------------------------------
+
+- Exact duplicates removed: 0
+- Missing cells before cleaning: 7229
+
+- Quantity values recovered: 0
+- Price values recovered: 609
+- Total Spent values recovered: 0
+
+- Item values inferred from category + price: 1213
+
+- Remaining missing cells: 0
+- Remaining duplicate rows: 0
+
+- Total formula mismatches after cleaning:
+  0
+
+
+OUTPUT
+----------------------------------------
+
+- retail_store_sales_cleaned.csv
+
+Cleaning completed successfully.
